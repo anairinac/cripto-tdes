@@ -189,16 +189,16 @@ int GetKey(int hexkey, char *cp)
 				if (j == 1){
 					j = 0;
 					*cp = hb + c;
+                                        cp++;
+                                        i++;
 				} else {
 					j = 1;
 					hb = c << 4;
-				}
-				cp++;
+				}				
 			} else {
 				printf("Bad hex digit\n");
 				return -6;
-			}
-			i++;
+			}			
 		}
 		if ((i < KEYLENGTH) && (j == 1)){
 			*cp = c << 4;
