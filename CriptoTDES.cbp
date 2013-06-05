@@ -31,9 +31,15 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="des.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="des.h" />
+		<Unit filename="errors.h" />
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="types.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />
