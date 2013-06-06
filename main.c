@@ -35,9 +35,9 @@
 void ShowHelp();
 
 int ParseOptions(int argc, char *argv[],
-				 int *hk, int *c, int *d, int *outf, int *inf,
+				 int *mk, int *hk, int *c, int *d, int *outf, int *inf,
 				 int *noutf, int *ninf);
-int GetKey(int hexkey, char *cp);
+int GetKey(int mixkey, int hexkey, char *cp);
 int GetAllArgs(int argc,char *argv[], int *m, char *chp,
 				 unsigned long int *f1, unsigned long int *f2);
 
@@ -74,16 +74,19 @@ int main(int argc, char *argv[])
 
 void ShowHelp()
 {
-	printf("Usage: tdes -e FILE [OPTIONS]\n");
-	printf("  or   tdes -d FILE [OPTIONS]\n");
+	printf("Usage: -e FILE [OPTIONS]\n");
+	printf("  or   -d FILE [OPTIONS]\n");
 	printf("Applies Triple DES encryption or decryption to FILE.\n\n");
 	printf("Options:\n");
 	printf("  -e                       Encrypt FILE\n");
 	printf("  -d                       Decrypt FILE\n");
 	printf("  -x                       Key in hexadecimal format\n");
 	printf("  -o <file>                Place the output into <file>\n");
-	printf("  -h                       Display this information\n\n");
+	printf("  -h                       Display this information\n");
+	printf("  -x                       Key in mixed format (hexadecimal and char values\n");
+	printf("                           switched by \ symbol).\n\n");
 	printf("If -o <file> is not given, the output will be placed into a.out.\n\n");
+	printf("Only one option can be done between -x and -m.\n");
 	printf("Only one operation can be done: encryption or decryption, so the options\n");
 	printf("`-e' and `-d' can't be given at the same time, but one of them must be given.\n");
 	printf("An input file  name is mandatory also.\n\n");
@@ -91,7 +94,7 @@ void ShowHelp()
 }
 
 int ParseOptions(int argc, char *argv[],
-				int *hk, int *c, int *d, int *outf, int *inf,
+				int *mk, int *hk, int *c, int *d, int *outf, int *inf,
 				int *noutf, int *ninf)
 {
 	int i;
@@ -122,6 +125,9 @@ int ParseOptions(int argc, char *argv[],
 		if        (strcmp(argv[i],"-x") == 0) {
 			*hk = TRUE;
 			/*hexkey = TRUE;*/
+        } else if (strcmp(argv[i],"-m") == 0) {
+			*mk = TRUE;
+			/*mixkey = TRUE;*/
 		} else if (strcmp(argv[i],"-e") == 0) {
 			*c = TRUE;
 			/*encrypt = TRUE;*/
@@ -148,21 +154,26 @@ int ParseOptions(int argc, char *argv[],
 
 	/* Check for invalid combination of options */
 
+    if ((*mk == *hk) && (*hk == TRUE)){
+		printf("Error: -x and -m can't be set at the same time.\n");
+		return -4;
+	}
+
 	if (*c == *d){
 		printf("Error: -e and -d can't be set at the same time.\n");
-		return -4;
+		return -5;
 	}
 
 	if (*inf == FALSE){
 		printf("Error: Must specify an input file.\n");
-		return -5;
+		return -6;
 	}
 	return 0;
 }
 
-int GetKey(int hexkey, char *cp)
+int GetKey(int mixkey, int hexkey, char *cp)
 {
-	int i, j;
+	int i, j, m;
 	char c, hb, *p;
 
 	p = cp;
@@ -189,20 +200,67 @@ int GetKey(int hexkey, char *cp)
 				if (j == 1){
 					j = 0;
 					*cp = hb + c;
-                                        cp++;
-                                        i++;
+                    cp++;
+                    i++;
 				} else {
 					j = 1;
 					hb = c << 4;
 				}
 			} else {
 				printf("Bad hex digit\n");
-				return -6;
+				return -7;
 			}
 		}
 		if ((i < KEYLENGTH) && (j == 1)){
 			*cp = c << 4;
 		}
+	} else if (mixkey == TRUE){
+        m = FALSE;
+		while (((c = getchar()) != '\n')&&(i < KEYLENGTH)){
+            if (c == 0x5c){
+                if (m == TRUE){
+                    if (j == 0){
+                        m = FALSE;
+                    } else {
+                        *cp = hb;
+                        cp++;
+                        i++;
+			j = FALSE;
+			m = FALSE;
+                    }
+                } else {
+                    m = TRUE;
+                }
+            } else if (m == TRUE){
+                if (((c <= '9')&&('0' <= c))||
+                    ((c <= 'F')&&('A' <= c))||
+                    ((c <= 'f')&&('a' <= c))){
+                        if (c > 0x39){
+                            c += 9;
+                        }
+                        c &= 0x0f;
+                        if (j == 1){
+                            j = 0;
+                            *cp = hb + c;
+                            cp++;
+                            i++;
+                        } else {
+                            j = 1;
+                            hb = c << 4;
+                        }
+                } else {
+                        printf("Bad hex digit\n");
+                        return -7;
+                }
+                if ((i < KEYLENGTH) && (j == 1)){
+                    *cp = c << 4;
+                }
+            } else {
+                *cp = c;
+                cp++;
+                i++;
+            }
+        }
 	} else {
 		while (((c = getchar()) != '\n')&&(i < KEYLENGTH)){
 			*cp = c;
@@ -217,12 +275,12 @@ int GetAllArgs(int argc, char *argv[], int *m, char *chp,
 				unsigned long int *f1, unsigned long int *f2)
 {
 	int s, inf, outf;
-	int hexkey, crypt, decrypt, outfileset, infileset;
+	int mixkey, hexkey, crypt, decrypt, outfileset, infileset;
 	FILE *fp;
 
-	hexkey = crypt = decrypt = outfileset = infileset = FALSE;
+	mixkey = hexkey = crypt = decrypt = outfileset = infileset = FALSE;
 
-	if (((s = ParseOptions(argc,&argv[0],&hexkey,&crypt,&decrypt,&outfileset,
+	if (((s = ParseOptions(argc,&argv[0],&mixkey,&hexkey,&crypt,&decrypt,&outfileset,
 		&infileset, &outf, &inf))) == 0){
 		*m = crypt;
 
