@@ -41,7 +41,7 @@ int GetKey(int hexkey, char *cp);
 int GetAllArgs(int argc,char *argv[], int *m, char *chp,
 				 unsigned long int *f1, unsigned long int *f2);
 
-int TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile);
+void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile);
 void CloseFiles(FILE *f1, FILE *f2);
 
 int main(int argc, char *argv[])
@@ -63,9 +63,7 @@ int main(int argc, char *argv[])
 		InputFile = fileptr1;
 		OutputFile = fileptr2;
 
-		if((status = TDESengine(mode,kp,InputFile,OutputFile))){
-		    return status;
-		}
+		TDESengine(mode,kp,InputFile,OutputFile);
 
 		CloseFiles(InputFile, OutputFile);
 
@@ -230,6 +228,25 @@ int GetAllArgs(int argc, char *argv[], int *m, char *chp,
 
 		s = GetKey(hexkey,chp);
 
+        //Validate the key blocks
+		unsigned char k1[8], k2[8], k3[8];
+        int i, j, n;
+
+        for (i = 0, j= 0;j < 8;i++, j++) k1[j] =chp[i];
+
+        for (j = 0; j < 8; i++, j++) k2[j] = chp[i];
+
+        for (j = 0; j < 8; i++, j++) k3[j] = chp[i];
+
+        if(!(strncmp(k1,k2,8)!=0 &&
+           strncmp(k1,k3,8)!=0 &&
+           strncmp(k3,k2,8)!=0))
+        {
+            printf("Invalid key, the blocks must be different\n");
+            return -10;
+        }
+        //End key blocks validation
+
 		if((fp = fopen(argv[inf],"r")) == NULL){
 			printf("tdes: file not found: %s\n",argv[inf]);
 			return -7;
@@ -254,11 +271,16 @@ int GetAllArgs(int argc, char *argv[], int *m, char *chp,
 	return s;
 }
 
-int TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
+void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 {
 	int c;
 
 	unsigned char k1[8], k2[8], k3[8];
+	unsigned char block[8];
+	unsigned char ciphertext[8];
+	unsigned char recoverd[8];
+	tripledes_ctx context;
+
 	int i, j, n;
 
 	for (i = 0, j= 0;j < 8;i++, j++) k1[j] = k[i];
@@ -267,50 +289,36 @@ int TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 
 	for (j = 0; j < 8; i++, j++) k3[j] = k[i];
 
-    if(strncmp(k1,k2,8)!=0 &&
-       strncmp(k1,k3,8)!=0 &&
-       strncmp(k3,k2,8)!=0)
-    {
-        unsigned char block[8];
-        unsigned char ciphertext[8];
-        unsigned char recoverd[8];
-        tripledes_ctx context;
+	n = tripledes_set3keys(context, k1, k2, k3);
 
-        n = tripledes_set3keys(context, k1, k2, k3);
+	i = 0;
+	while ((c = getc(InputFile)) != EOF) {
+		block[i] = c;
+		i = (i < 7) ? i + 1: 0;
 
-        i = 0;
-        while ((c = getc(InputFile)) != EOF) {
-            block[i] = c;
-            i = (i < 7) ? i + 1: 0;
+		if (i == 0){
+			if (m == SHOULD_ENCRYPT){
+				tripledes_ecb_encrypt(context,block,ciphertext);
+				for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
+			} else {
+				tripledes_ecb_decrypt(context, block, recoverd);
+				for (j = 0; j < 8; putc((recoverd[j]),OutputFile),j++);
+			}
+		}
+	}
+	// Processing the last (incomplete) block
+	if (i < 7){
+		for(;i<7;i++) block[i] = 0x00;
+	}
+	if (m == SHOULD_ENCRYPT){
+		tripledes_ecb_encrypt(context,block,ciphertext);
+		for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
+	} else {
+		tripledes_ecb_decrypt(context, block, recoverd);
+		for (j = 0; j < 8; putc((recoverd[j]),OutputFile),j++);
+	}
 
-            if (i == 0){
-                if (m == SHOULD_ENCRYPT){
-                    tripledes_ecb_encrypt(context,block,ciphertext);
-                    for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
-                } else {
-                    tripledes_ecb_decrypt(context, block, recoverd);
-                    for (j = 0; j < 8; putc((recoverd[j]),OutputFile),j++);
-                }
-            }
-        }
-        // Processing the last (incomplete) block
-        if (i < 7){
-            for(;i<7;i++) block[i] = 0x00;
-        }
-        if (m == SHOULD_ENCRYPT){
-            tripledes_ecb_encrypt(context,block,ciphertext);
-            for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
-        } else {
-            tripledes_ecb_decrypt(context, block, recoverd);
-            for (j = 0; j < 8; putc((recoverd[j]),OutputFile),j++);
-        }
-    }
-    else{
-        printf("Invalid key, the blocks must be different\n");
-        return -10;
-    }
-
-	return 0;
+	return;
 }
 
 void CloseFiles(FILE *f1, FILE *f2)
