@@ -1,0 +1,3 @@
+Soy un archivo de prueba
+para ver como borrar caracteres al principio
+de un archivo.
