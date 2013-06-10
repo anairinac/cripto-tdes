@@ -1,10 +1,14 @@
 /***************************************************************************
  *            main.c
  *
- *  Version 1.0.0
- *  Wed Sep 26 21:26:01 2012
+ *  Version 2.0.0
+ *  Sun Jun 09 18:28:10 2013
  *  Copyright  2012  Jorge Vargas Calvo, ITCR, Costa Rica
  *  Email avargas@itcr.ac.cr
+ *	Modified by:	Ana Irina Calvo Carvajal, email: acalvo@ic-itcr.ac.cr
+ *					David Montero B., email: damonber@gmail.com
+ *					Juan José Rojas Valverde, email: juanrojas@ic-itcr.ac.cr
+ *					Juan Alonso Solano, email: jasol624@gmail.com
  ****************************************************************************/
 
 /*
@@ -38,21 +42,15 @@
 #define FALSE           0
 #define KEYLENGTH      24
 #define SHOULD_ENCRYPT  1
-
-//Agregado por Juan Alonso Solano
 #define DO_HASH         2
-//fin del agregado
 
-// GLOBAL VARIABLES FOR CLEANER
+
 char * inputFileName = "";
 char * outputFileName = "";
 int cleanerBlockSize = 0;
 int cleanerMode = 0;
-// END OF GLOBAL VARIABLES
-
 
 void ShowHelp();
-
 int ParseOptions(int argc, char *argv[],
 				 int *mk, int *hk, int *c, int *d, int *outf, int *inf,
 				 int *noutf, int *ninf);
@@ -83,7 +81,12 @@ int main(int argc, char *argv[])
 		OutputFile = fileptr2;
 
 		TDESengine(mode,kp,InputFile,OutputFile);
-
+		
+		free(inputFileName);
+		free(outputFileName);
+		inputFileName = NULL;
+		outputFileName = NULL;
+		
 		CloseFiles(InputFile, OutputFile);
 
 		return 0;
@@ -95,16 +98,12 @@ void ShowHelp()
 {
 	printf("Usage: -e FILE [OPTIONS]\n");
 	printf("  or   -d FILE [OPTIONS]\n");
-	//Agregado por Juan Alonso Solano
 	printf("  or   -hash FILE [OPTIONS]\n");
-	//fin del agregado 
 	printf("Applies Triple DES encryption or decryption to FILE.\n\n");
 	printf("Options:\n");
 	printf("  -e                       Encrypt FILE\n");
 	printf("  -d                       Decrypt FILE\n");
-	//Agregado por Juan Alonso Solano
 	printf("  -hash                    Create a Digest from FILE\n");
-	//fin del agregado 
 	printf("  -x                       Key in hexadecimal format\n");
 	printf("  -o <file>                Place the output into <file>\n");
 	printf("  -h                       Display this information\n");
@@ -159,12 +158,9 @@ int ParseOptions(int argc, char *argv[],
 		} else if (strcmp(argv[i],"-d") == 0) {
 			*d = TRUE;
 			/*decrypt = TRUE;*/
-		//Agregado por Juan Alonso Solano
-		//Esto agrega la opción de hashing al uso del programa
 		} else if (strcmp(argv[i],"-hash") == 0) {
 		        *c = DO_HASH;
 		        /*hash = TRUE*/
-		//fin del agregado 
 		} else if ((strcmp(argv[i],"-o") == 0) &&
 				(i < argc - 1) &&
 				(*argv[i+1] != '-')){
@@ -317,7 +313,7 @@ int GetAllArgs(int argc, char *argv[], int *m, char *chp,
 
 		s = GetKey(mixkey,hexkey,chp);
 
-        	//Validate the key blocks
+		//Validate the key blocks
 		unsigned char k1[8], k2[8], k3[8];
 		int i, j, n;
 
@@ -337,7 +333,6 @@ int GetAllArgs(int argc, char *argv[], int *m, char *chp,
 		//End key blocks validation
 		
 		//allocation for filenames
-		
 		inputFileName = malloc((int)strlen(argv[inf]) * sizeof(* inputFileName));
 		inputFileName = argv[inf];
 		outputFileName = malloc((int)strlen(argv[outf]) * sizeof(* outputFileName));
@@ -376,10 +371,8 @@ void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 	unsigned char ciphertext[8];
 	unsigned char recoverd[8];
 	tripledes_ctx context;
-	//Agregados por Juan Alonso Solano
 	int flag = 0;
 	unsigned char str[8];
-	//fin del agregado
 
 	int i, j, n;
 
@@ -401,7 +394,6 @@ void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 				tripledes_ecb_encrypt(context,block,ciphertext);
 				for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
 			}
-			//Agregado por Juan Alonso Solano
 			//Digest
 			else if (m == DO_HASH){
 				if (flag == 0){
@@ -416,7 +408,6 @@ void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 						str[j]=ciphertext[j]^str[j];
 					}
 				}
-				//fin del agregado 
 			}
 			else {
 				tripledes_ecb_decrypt(context, block, recoverd);
@@ -426,26 +417,21 @@ void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 	}
 	// Processing the last (incomplete) block
 	if (i < 7){
-		//TDES ENCRYPT CLEANER VARS
 		unsigned char * buffer[2];
 		int incompleteChars = 8 - i;
-		//END OF TDES ENCRYPT CLEANER VARS
 		for(;i<7;i++){
 			block[i] = 0x00;
 		}
-		//TDES ENCRYPT CLEANER
 		if (m == SHOULD_ENCRYPT){
 			sprintf(buffer,"%d",incompleteChars);
 			block[7] = buffer[0];
 		}
-		//END OF TDES ENCRYPT CLEANER
 	}
 	if (m == SHOULD_ENCRYPT){
 		tripledes_ecb_encrypt(context,block,ciphertext);
 		for (j = 0; j < 8; putc((ciphertext[j]),OutputFile),j++);
 	} 
-	//Agregado por Juan Alonso Solano
-	//Digest de bloques incompletos
+	//Incomplete block digest
 	else if (m == DO_HASH){
 		if (flag == 0){
 			tripledes_ecb_encrypt(context,block,ciphertext);
@@ -460,41 +446,29 @@ void TDESengine(int m,char *k,FILE *InputFile, FILE *OutputFile)
 				str[j] = ciphertext[j]^str[j];
 			}
 		}
-		//fin del agregado
 	}	
 	else {
 		tripledes_ecb_decrypt(context, block, recoverd);
 		for (j = 0; j < 8; putc((recoverd[j]),OutputFile),j++);
-		//TDES DECRYPT CLEANER
 		off_t position;
 		unsigned char * paddingChar[2];
 		int paddingNum, charsToDelete;
 		position = ftello(OutputFile);
-		//printf("Pos inicial: %d\n",(int)position);
 		fseeko(OutputFile,-9,SEEK_END);
 		position = ftello(OutputFile);
-		//printf("Pos desde final: %d\n",(int)position);
 		sprintf(paddingChar,"%c",getc(OutputFile));
 		paddingNum = strtol(paddingChar, NULL, 10);
-		//printf("Padding num: %d\n",paddingNum);
 		position = ftello(OutputFile);
-		//printf("Pos despues de getc: %d\n",(int)position);
 		charsToDelete = paddingNum + 8;
-		//printf("Pad position: %d\n",-charsToDelete);
 		fseeko(OutputFile,-charsToDelete,SEEK_END);
 		position = ftello(OutputFile);
-		//printf("Pos para truncar: %d\n",(int)position);
 		ftruncate(fileno(OutputFile), position);
 		fseeko(OutputFile,0,SEEK_END);
-		//END OF TDES DECRYPT CLEANER
 	}
-	//Agregado por Juan Alonso Solano
-	//Envío de bloques al archivo de salida, 8 bytes
 	if (m == DO_HASH){
 		tripledes_ecb_encrypt(context,block,ciphertext);
 		for (j = 0; j < 8; putc((str[j]),OutputFile),j++);
 	}
-	//fin del agregado
 	return;
 }
 
